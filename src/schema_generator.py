@@ -1,7 +1,12 @@
 import os
 import json
 import random
-from typing import Dict, Any
+from typing import Dict, Any, List
+
+import kafka
+import avro.schema
+from avro.datafile import DataFileWriter, DataFileReader
+from avro.io import DatumWriter, DatumReader
 
 class AvroSchemaConverter:
     @staticmethod
@@ -79,6 +84,54 @@ class AvroSchemaConverter:
         with open(output_path, 'w') as f:
             f.write(class_content)
     
+    @staticmethod
+    def stream_to_kafka(data: List[Dict[str, Any]], topic: str, bootstrap_servers: List[str] = ['localhost:9092']):
+        """
+        Stream generated data to Kafka topic
+        
+        :param data: List of data dictionaries to stream
+        :param topic: Kafka topic to stream to
+        :param bootstrap_servers: List of Kafka bootstrap servers
+        """
+        producer = kafka.KafkaProducer(
+            bootstrap_servers=bootstrap_servers,
+            value_serializer=lambda x: json.dumps(x).encode('utf-8')
+        )
+        
+        for record in data:
+            producer.send(topic, record)
+        
+        producer.flush()
+        producer.close()
+    
+    @staticmethod
+    def read_from_kafka(topic: str, bootstrap_servers: List[str] = ['localhost:9092'], max_records: int = 10) -> List[Dict[str, Any]]:
+        """
+        Read data from Kafka topic
+        
+        :param topic: Kafka topic to read from
+        :param bootstrap_servers: List of Kafka bootstrap servers
+        :param max_records: Maximum number of records to read
+        :return: List of data dictionaries read from Kafka
+        """
+        consumer = kafka.KafkaConsumer(
+            topic,
+            bootstrap_servers=bootstrap_servers,
+            auto_offset_reset='earliest',
+            enable_auto_commit=True,
+            group_id='avro-schema-consumer',
+            value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+        )
+        
+        records = []
+        for message in consumer:
+            records.append(message.value)
+            if len(records) >= max_records:
+                break
+        
+        consumer.close()
+        return records
+
 # Example usage
 if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))
