@@ -1,0 +1,85 @@
+version: '3'
+
+vars:
+  PYTHON: python
+  VENV: .venv
+  KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+  KAFKA_TEST_TOPIC: avro_schema_test_topic
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  setup:
+    desc: Set up virtual environment and install dependencies
+    cmds:
+      - '{{.PYTHON}} -m venv {{.VENV}}'
+      - '{{.VENV}}\Scripts\pip install -r requirements.txt'
+    status:
+      - test -d {{.VENV}}
+
+  activate:
+    desc: Activate virtual environment
+    cmds:
+      - echo "Run: {{.VENV}}\Scripts\activate"
+
+  test:
+    desc: Run all tests
+    deps: [setup]
+    cmds:
+      - '{{.VENV}}\Scripts\pytest'
+
+  test:kafka:
+    desc: Run Kafka-specific tests
+    deps: [setup]
+    cmds:
+      - '{{.VENV}}\Scripts\pytest tests/test_schema_generator.py::test_kafka_streaming'
+
+  kafka:start:
+    desc: Start local Kafka server (requires Docker)
+    cmds:
+      - docker-compose up -d
+      - echo "Waiting for Kafka to be ready..."
+      - sleep 30
+
+  kafka:stop:
+    desc: Stop local Kafka server
+    cmds:
+      - docker-compose down
+
+  kafka:status:
+    desc: Check status of Kafka services
+    cmds:
+      - docker-compose ps
+
+  kafka:logs:
+    desc: View Kafka server logs
+    cmds:
+      - docker-compose logs kafka
+
+  generate:
+    desc: Generate random data from Avro schema
+    deps: [setup]
+    cmds:
+      - '{{.VENV}}\Scripts\python -c "from src.schema_generator import AvroSchemaConverter; print(AvroSchemaConverter.generate_random_data(''src/user_schema.avsc''))"'
+
+  stream:kafka:
+    desc: Stream generated data to Kafka
+    deps: [setup]
+    cmds:
+      - '{{.VENV}}\Scripts\python -c "from src.schema_generator import AvroSchemaConverter; data = [AvroSchemaConverter.generate_random_data(''src/user_schema.avsc'') for _ in range(5)]; AvroSchemaConverter.stream_to_kafka(data, ''{{.KAFKA_TEST_TOPIC}}'', [''{{.KAFKA_BOOTSTRAP_SERVERS}}'])"'
+
+  read:kafka:
+    desc: Read data from Kafka
+    deps: [setup]
+    cmds:
+      - '{{.VENV}}\Scripts\python -c "from src.schema_generator import AvroSchemaConverter; print(AvroSchemaConverter.read_from_kafka(''{{.KAFKA_TEST_TOPIC}}'', [''{{.KAFKA_BOOTSTRAP_SERVERS}}']))"'
+
+  clean:
+    desc: Clean up virtual environment and cache files
+    cmds:
+      - rm -rf {{.VENV}}
+      - find . -type d -name "__pycache__" -exec rm -rf {} +
+      - find . -type f -name "*.pyc" -delete
