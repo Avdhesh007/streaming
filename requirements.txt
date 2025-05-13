@@ -1,2 +1,4 @@
 dataclasses-avroschema==0.39.0
 pytest==7.3.1
+kafka-python==2.2.6
+avro-python3==1.10.2
