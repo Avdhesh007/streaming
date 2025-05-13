@@ -19,7 +19,7 @@ def test_avsc_to_class_conversion():
     
     # Check if schema has expected attributes
     assert schema['name'] == 'User'
-    assert 'id' in schema['fields'][0]
+    assert schema['fields'][0]['name'] == 'id'
     assert schema['fields'][0]['type'] == 'int'
 
 def test_random_data_generation():
